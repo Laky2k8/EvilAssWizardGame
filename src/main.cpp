@@ -51,6 +51,19 @@ int map_walls[] =
 	2,0,0,0,0,0,0,1,
 	1,1,3,1,3,1,3,1,	
 };
+
+int map_floor[]=          //floors
+{
+	7,7,7,7,7,7,7,7,
+	7,0,0,7,7,7,7,7,
+	7,0,0,0,6,7,7,7,
+	7,7,7,7,6,7,7,7,
+	7,7,6,6,6,7,7,7,
+	7,7,6,7,7,7,7,7,
+	7,7,6,7,8,8,8,7,
+	7,7,7,7,7,7,7,7,	
+};
+
 void drawMap2D();
 
 int main() 
@@ -506,30 +519,31 @@ void raycast(Player plr)
 		{
 			for(int y = line_offset + line_height; y < GetScreenHeight(); y++)
 			{
-				float dY = y - (GetScreenHeight() / 2.0);
 				float deg = degToRad(rayAngle);
-				float raFix = cos(degToRad(plr.angle - rayAngle));
+
+				// Step 1: Calculate the distance to the floor point
+				float planeDistance = (tile_size * GetScreenHeight()) / max(1.0, (2.0 * y - GetScreenHeight()));
 				
-				// Calculate the actual floor distance
-				float floorDist = (tile_size * (GetScreenHeight() / 2.0)) / dY;
-				
-				// Apply the fisheye correction
-				floorDist = floorDist / raFix;
-				
-				// Calculate world position
-				float floorX = plr.position.x + cos(deg) * floorDist;
-				float floorY = plr.position.y - sin(deg) * floorDist;
-				
-				// Convert to texture coordinates (divide by 2 because texture is 32x32 but tiles are 64x64)
-				int ftexX = ((int)(floorX / 2.0)) & 31;
-				int ftexY = ((int)(floorY / 2.0)) & 31;
-				
-				float brightness = All_Textures[ftexY * 32 + ftexX] * 255;
+				// Step 2: Calculate the actual floor point in world space
+				float floor_x = plr.position.x + cos(deg) * planeDistance;
+				float floor_y = plr.position.y - sin(deg) * planeDistance;
+
+				int tex_size = 32;
+
+				int tex_x = (int)((floor_x / tile_size - (int)(floor_x / tile_size)) * tex_size) & (tex_size - 1);
+				int tex_y = (int)((floor_y / tile_size - (int)(floor_y / tile_size)) * tex_size) & (tex_size - 1);
+
+				int mp = map_floor[(int)(floor_y / tile_size) * map_width + (int)(floor_x / tile_size)];
+
+				// Calculate brightness from the floor texture
+				// Add texture offset to tex_y, then index normally
+				int final_tex_y = mp * 32 + tex_y;
+				float brightness = All_Textures[final_tex_y * 32 + tex_x];
 
 				rlBegin(RL_LINES);
 				rlColor4ub(brightness, brightness, brightness, 255);
-				rlVertex2f(ray * resolution + 530, y);
-				rlVertex2f(ray * resolution + 535, y);
+				rlVertex2f(ray * resolution+530, y);
+				rlVertex2f(ray * resolution+535, y);
 				rlEnd();
 			}
 		}
