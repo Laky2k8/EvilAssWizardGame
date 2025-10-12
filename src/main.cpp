@@ -1,8 +1,10 @@
 #include "raylib.h"
 #include <string>
 #include <cmath>
+#include "rlgl.h"
 
 #include "Player.h"
+#include "textures.h"
 
 #define TITLE "Evil Ass Wizard Game"
 #define VERSION_NUM "0.0.1"
@@ -38,7 +40,7 @@ void raycast(Player plr);
 // --- MAP ----
 int map_width = 8, map_height = 8;
 int tile_size = 64;
-int map[] =
+int map_walls[] =
 {
 	1,1,1,1,1,3,1,1,
 	1,0,0,2,0,0,0,1,
@@ -99,12 +101,12 @@ int main()
 		if(IsKeyDown(KEY_W)) 
 		{ 
 
-			if(map[ipy * map_width + ipx_add_offset] == 0)
+			if(map_walls[ipy * map_width + ipx_add_offset] == 0)
 			{
 				plr.position.x += plr.deltaPos.x * plr.speed * GetFrameTime();
 			}
 
-			if(map[ipy_add_offset * map_width + ipx] == 0)
+			if(map_walls[ipy_add_offset * map_width + ipx] == 0)
 			{
 				plr.position.y += plr.deltaPos.y * plr.speed * GetFrameTime();
 			}
@@ -112,12 +114,12 @@ int main()
 		} 
 		if(IsKeyDown(KEY_S))
 		{
-			if(map[ipy * map_width + ipx_sub_offset] == 0)
+			if(map_walls[ipy * map_width + ipx_sub_offset] == 0)
 			{
 				plr.position.x -= plr.deltaPos.x * plr.speed * GetFrameTime();
 			}
 
-			if(map[ipy_sub_offset * map_width + ipx] == 0)
+			if(map_walls[ipy_sub_offset * map_width + ipx] == 0)
 			{
 				plr.position.y -= plr.deltaPos.y * plr.speed * GetFrameTime();
 			}
@@ -151,6 +153,26 @@ int main()
 			plr.angle = FixAng(plr.angle);
 			plr.deltaPos.x = cos(degToRad(plr.angle));
 			plr.deltaPos.y = -sin(degToRad(plr.angle));
+		}
+
+		if(IsKeyDown(KEY_E))
+		{
+			int interactOffsetX = (plr.deltaPos.x < 0) ? -20 : 20;
+			int interactOffsetY = (plr.deltaPos.y < 0) ? -20 : 20;
+
+			int interactX = plr.position.x / tile_size;
+			int interactX_add = (plr.position.x + xOffset) / tile_size;
+
+			int interactY = plr.position.y / tile_size;
+			int interactY_add = (plr.position.y + yOffset) / tile_size;
+
+			if(map_walls[interactY_add * map_width + interactX_add] == 4)
+			{
+				// If there's a door and we interact with it, open it
+				map_walls[interactY_add * map_width + interactX_add] = 0;
+			}
+
+
 		}
 
 
@@ -187,7 +209,7 @@ void drawMap2D()
 		for(x = 0; x < map_width; x++)
 		{
 			// If wall (not empty)
-			if(map[y * map_width + x] > 0)
+			if(map_walls[y * map_width + x] > 0)
 			{
 				tileColor = WHITE;
 			}
@@ -237,6 +259,9 @@ void raycast(Player plr)
 		distVert = 1000000000;
 
 		distance = 0;
+		
+		int vert_map_texture = 0;
+		int horiz_map_texture = 0;
 
 		// --- Vertical Lines ---
 		view_dist = 0;
@@ -284,10 +309,12 @@ void raycast(Player plr)
 			mY = (int)(rayY / 64);
 			mapPos = mY * map_width + mX;
 
-			if(mapPos >= 0 && mapPos < map_width * map_height && map[mapPos] > 0)
+			if(mapPos >= 0 && mapPos < map_width * map_height && map_walls[mapPos] > 0)
 			{
 				// We hit a wall!!! Yippeee
 				view_dist = 8; // We ain't lookin around anymore
+
+				vert_map_texture = map_walls[mapPos] - 1;
 
 				vertX = rayX;
 				vertY = rayY;
@@ -349,10 +376,12 @@ void raycast(Player plr)
 			mY = (int)(rayY / 64);
 			mapPos = mY * map_width + mX;
 
-			if(mapPos >= 0 && mapPos < map_width * map_height && map[mapPos] > 0)
+			if(mapPos >= 0 && mapPos < map_width * map_height && map_walls[mapPos] > 0)
 			{
 				// We hit a wall!!! Yippeee
 				view_dist = 8; // We ain't lookin around anymore
+
+				horiz_map_texture = map_walls[mapPos] - 1;
 
 				horizX = rayX;
 				horizY = rayY;
@@ -370,13 +399,19 @@ void raycast(Player plr)
 		}
 
 		// The ray's pos is the shortest distance of the two
+
+		bool hitVertical = false;
+
 		if(distVert < distHoriz)
 		{
 			rayX = vertX;
 			rayY = vertY;
 			distance = distVert;
 
+			horiz_map_texture = vert_map_texture;
+
 			shade = 230;
+			hitVertical = true;
 		}
 		else
 		{
@@ -384,7 +419,10 @@ void raycast(Player plr)
 			rayY = horizY;
 			distance = distHoriz;
 
+			vert_map_texture = horiz_map_texture;
+
 			shade = 178;
+			hitVertical = false;
 		}
 
 		// Draw the  hit with green :]
@@ -400,15 +438,103 @@ void raycast(Player plr)
 		float ca = degToRad(ca_deg);
 		distance = distance * cos(ca);
 
-		// Draw 3D Walls
 		float projectionPlaneDistance = (GetScreenWidth() / 2) / tan(degToRad(plr.fov / 2));
 		float line_height = (tile_size * projectionPlaneDistance) / distance;
-		if(line_height > GetScreenHeight()) {line_height = GetScreenHeight();}
+
+		// Textured walls
+		float texY = 0; // which pixel we're currently at in the line
+		float texX = 0;
+		float texY_step = 32.0 / (float)line_height; // The amount we step to get to the next pixel
+		float texY_offset = 0;
+
+		if(line_height > GetScreenHeight())
+		{
+			texY_offset = (line_height - GetScreenHeight()) / 2.0;
+			line_height = GetScreenHeight();
+		}
 		
 		// Center our beautiful lines on screen
 		float line_offset = (GetScreenHeight() / 2) - line_height / 2;
 
-		DrawLineEx({ray*resolution+530, line_offset}, {ray*resolution+530, line_offset + line_height}, resolution, {0, shade, 0, 255});
+		//DrawLineEx({ray*resolution+530, line_offset}, {ray*resolution+530, line_offset + line_height}, resolution, {0, shade, 0, 255});
+
+		// --- Draw 3D Walls ---
+		{
+			texY = texY_offset * texY_step + horiz_map_texture * 32; // Always get the texture the map calls for :]
+
+			if(hitVertical)
+			{
+				float texCoord = fmod(rayY, 64.0f);
+				if(texCoord < 0) texCoord += 64.0f;
+				texX = (int)(texCoord / 2.0f);
+				
+				// Flip if looking left (angle between 90 and 270)
+				if(rayAngle > 90 && rayAngle < 270)
+				{
+					texX = 31 - texX;
+				}
+			}
+			else
+			{
+				float texCoord = fmod(rayX, 64.0f);
+				if(texCoord < 0) texCoord += 64.0f;
+				texX = (int)(texCoord / 2.0f);
+				
+				// Flip if looking up (angle between 0 and 180)
+				if(rayAngle < 180)
+				{
+					texX = 31 - texX;
+				}
+			}
+
+			for(int y = 0; y < line_height; y++)
+			{
+
+				float brightness = All_Textures[(int)(texY) * 32 + (int)(texX)];
+
+				rlBegin(RL_LINES);
+				rlColor4ub(brightness * shade, brightness * shade, brightness * shade, 255);
+				rlVertex2f(ray * resolution+530, y+line_offset);
+				rlVertex2f(ray * resolution+535, y+line_offset);
+				rlEnd();
+
+				texY += texY_step; // Step to the next pixel in the line
+			}
+		}
+
+		// --- Draw Floors ---
+		{
+			for(int y = line_offset + line_height; y < GetScreenHeight(); y++)
+			{
+				float dY = y - (GetScreenHeight() / 2.0);
+				float deg = degToRad(rayAngle);
+				float raFix = cos(degToRad(plr.angle - rayAngle));
+				
+				// Calculate the actual floor distance
+				float floorDist = (tile_size * (GetScreenHeight() / 2.0)) / dY;
+				
+				// Apply the fisheye correction
+				floorDist = floorDist / raFix;
+				
+				// Calculate world position
+				float floorX = plr.position.x + cos(deg) * floorDist;
+				float floorY = plr.position.y - sin(deg) * floorDist;
+				
+				// Convert to texture coordinates (divide by 2 because texture is 32x32 but tiles are 64x64)
+				int ftexX = ((int)(floorX / 2.0)) & 31;
+				int ftexY = ((int)(floorY / 2.0)) & 31;
+				
+				float brightness = All_Textures[ftexY * 32 + ftexX] * 255;
+
+				rlBegin(RL_LINES);
+				rlColor4ub(brightness, brightness, brightness, 255);
+				rlVertex2f(ray * resolution + 530, y);
+				rlVertex2f(ray * resolution + 535, y);
+				rlEnd();
+			}
+		}
+
+
 
 		rayAngle -= ray_angle_increment;
 		rayAngle = FixAng(rayAngle);
