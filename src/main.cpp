@@ -1,6 +1,7 @@
 #include "raylib.h"
 #include <string>
 #include <cmath>
+#include <algorithm>
 #include "rlgl.h"
 
 #include "Player.h"
@@ -64,6 +65,18 @@ int map_floor[]=          //floors
 	7,7,7,7,7,7,7,7,	
 };
 
+int map_ceiling[]=          //ceiling
+{
+ 1,1,1,1,1,1,1,1,
+ 1,5,5,1,0,0,0,1,
+ 1,5,5,1,0,0,0,1,
+ 1,1,1,1,1,1,1,1,
+ 1,2,1,1,1,1,1,1,
+ 1,2,1,1,1,1,1,1,
+ 1,1,1,1,0,0,0,1,
+ 1,1,1,1,1,1,1,1,	
+};
+
 void drawMap2D();
 
 int main() 
@@ -73,6 +86,10 @@ int main()
 	InitWindow(screenWidth, screenHeight, TITLE);
 	SetTargetFPS(180);
 	//DisableCursor();
+
+	Image wizard = LoadImage("assets/wizard.png");
+	Image wizard_interact = LoadImage("assets/wizard_interact.png");
+	bool isInteracting = false;
 
 	Player plr({300, 300}, 200, 60);
 	plr.angle = -90;
@@ -185,6 +202,7 @@ int main()
 				map_walls[interactY_add * map_width + interactX_add] = 0;
 			}
 
+			isInteracting = true;
 
 		}
 
@@ -196,6 +214,28 @@ int main()
 		drawMap2D();
 		raycast(plr);
 		drawPlayer(plr, 8, YELLOW);
+
+		// Draw 128x128 wizard image scaled up to 512x512 at bottom right
+
+		if(isInteracting)
+		{
+			DrawTexturePro(LoadTextureFromImage(wizard_interact), {0,0,128,128}, {screenWidth - 400, screenHeight - 400, 400, 400}, {0,0}, 0, WHITE);
+
+			// Wait a second and then stop interacting
+			static float interactTimer = 0;
+			interactTimer += GetFrameTime();
+			if(interactTimer > 0.5f)
+			{
+				isInteracting = false;
+				interactTimer = 0;
+			}
+		}
+		else
+		{
+			DrawTexturePro(LoadTextureFromImage(wizard), {0,0,128,128}, {screenWidth - 400, screenHeight - 400, 400, 400}, {0,0}, 0, WHITE);
+		}
+
+		
 
 		EndDrawing();
 	}
@@ -517,38 +557,141 @@ void raycast(Player plr)
 
 		// --- Draw Floors ---
 		{
-			for(int y = line_offset + line_height; y < GetScreenHeight(); y++)
+			const int screenH = GetScreenHeight();
+			const int screenW = GetScreenWidth();
+			
+			// Wall bounds
+			int wallTop = (int)line_offset;
+			int wallBottom = (int)(line_offset + line_height);
+			
+			// Only render floor below the wall
+			for (int y = wallBottom; y < screenH; y++)
 			{
-				float deg = degToRad(rayAngle);
-
-				// Step 1: Calculate the distance to the floor point
-				float planeDistance = (tile_size * GetScreenHeight()) / max(1.0, (2.0 * y - GetScreenHeight()));
+				float screenMiddle = screenH / 2.0f;
+				float projectionDistance = (screenW / 2.0f) / tanf(degToRad(plr.fov / 2.0f));
 				
-				// Step 2: Calculate the actual floor point in world space
-				float floor_x = plr.position.x + cos(deg) * planeDistance;
-				float floor_y = plr.position.y - sin(deg) * planeDistance;
-
-				int tex_size = 32;
-
-				int tex_x = (int)((floor_x / tile_size - (int)(floor_x / tile_size)) * tex_size) & (tex_size - 1);
-				int tex_y = (int)((floor_y / tile_size - (int)(floor_y / tile_size)) * tex_size) & (tex_size - 1);
-
-				int mp = map_floor[(int)(floor_y / tile_size) * map_width + (int)(floor_x / tile_size)];
-
-				// Calculate brightness from the floor texture
-				// Add texture offset to tex_y, then index normally
-				int final_tex_y = mp * 32 + tex_y;
-				float brightness = All_Textures[final_tex_y * 32 + tex_x];
-
+				// Distance to floor point at this screen row
+				float floorDist = (tile_size / 2.0f * projectionDistance) / (y - screenMiddle);
+				
+				float rayDirX = cosf(degToRad(rayAngle));
+				float rayDirY = -sinf(degToRad(rayAngle));
+				
+				// World position of floor point
+				float floorX = plr.position.x + rayDirX * floorDist;
+				float floorY = plr.position.y + rayDirY * floorDist;
+				
+				// Which map cell is this?
+				int mapX = (int)(floorX / tile_size);
+				int mapY = (int)(floorY / tile_size);
+				
+				if (mapX < 0 || mapX >= map_width || mapY < 0 || mapY >= map_height)
+					continue;
+					
+				// Check if there's a wall here
+				if (map_walls[mapY * map_width + mapX] > 0)
+					continue;
+					
+				int floorTex = map_floor[mapY * map_width + mapX];
+				if (floorTex <= 0)
+					continue;
+					
+				// Texture coordinates within the tile
+				float texCoordX = fmodf(floorX, tile_size);
+				float texCoordY = fmodf(floorY, tile_size);
+				if (texCoordX < 0) texCoordX += tile_size;
+				if (texCoordY < 0) texCoordY += tile_size;
+				
+				// Convert to texture coordinates
+				int texX = (int)(texCoordX / 2.0f);
+				int texY = (int)(texCoordY / 2.0f);
+				if (texX < 0) texX = 0; if (texX > 31) texX = 31;
+				if (texY < 0) texY = 0; if (texY > 31) texY = 31;
+				
+				// Sample texture
+				int textureIndex = (floorTex - 1) * 32;
+				float brightness = All_Textures[(int)(texY) * 32 + (int)(texX) + textureIndex];
+				
+				float shade = 1.0f / (1.0f + floorDist * 0.001f);
+				if (shade < 0.3f) shade = 0.3f;
+				
+				unsigned char color = (unsigned char)(brightness * shade * 255.0f);
+				
 				rlBegin(RL_LINES);
-				rlColor4ub(brightness, brightness, brightness, 255);
-				rlVertex2f(ray * resolution+530, y);
-				rlVertex2f(ray * resolution+535, y);
+				rlColor4ub(color, color, color, 255);
+				rlVertex2f(ray * resolution + 530, y);
+				rlVertex2f(ray * resolution + 535, y);
 				rlEnd();
 			}
 		}
 
-
+		// --- Draw Ceiling ---
+		{
+			const int screenH = GetScreenHeight();
+			const int screenW = GetScreenWidth();
+			
+			// Wall bounds
+			int wallTop = (int)line_offset;
+			int wallBottom = (int)(line_offset + line_height);
+			
+			// Only render ceiling above the wall
+			for (int y = 0; y < wallTop; y++)
+			{
+				float screenMiddle = screenH / 2.0f;
+				float projectionDistance = (screenW / 2.0f) / tanf(degToRad(plr.fov / 2.0f));
+				
+				// Distance to floor point at this screen row
+				float ceilingDist = (tile_size / 2.0f * projectionDistance) / (screenMiddle - y);
+				
+				float rayDirX = cosf(degToRad(rayAngle));
+				float rayDirY = -sinf(degToRad(rayAngle));
+				
+				// World position of floor point
+				float floorX = plr.position.x + rayDirX * ceilingDist;
+				float floorY = plr.position.y + rayDirY * ceilingDist;
+				
+				// Which map cell is this?
+				int mapX = (int)(floorX / tile_size);
+				int mapY = (int)(floorY / tile_size);
+				
+				if (mapX < 0 || mapX >= map_width || mapY < 0 || mapY >= map_height)
+					continue;
+					
+				// Check if there's a wall here
+				if (map_walls[mapY * map_width + mapX] > 0)
+					continue;
+					
+				int ceilTex = map_ceiling[mapY * map_width + mapX];
+				if (ceilTex <= 0)
+					continue;
+					
+				// Texture coordinates within the tile
+				float texCoordX = fmodf(floorX, tile_size);
+				float texCoordY = fmodf(floorY, tile_size);
+				if (texCoordX < 0) texCoordX += tile_size;
+				if (texCoordY < 0) texCoordY += tile_size;
+				
+				// Convert to texture coordinatess
+				int texX = (int)(texCoordX / 2.0f);
+				int texY = (int)(texCoordY / 2.0f);
+				if (texX < 0) texX = 0; if (texX > 31) texX = 31;
+				if (texY < 0) texY = 0; if (texY > 31) texY = 31;
+				
+				// Sample texture
+				int textureIndex = (ceilTex - 1) * 32;
+				float brightness = All_Textures[(int)(texY) * 32 + (int)(texX) + textureIndex];
+				
+				float shade = 1.0f / (1.0f + ceilingDist * 0.001f);
+				if (shade < 0.3f) shade = 0.3f;
+				
+				unsigned char color = (unsigned char)(brightness * shade * 255.0f);
+				
+				rlBegin(RL_LINES);
+				rlColor4ub(color, color, color, 255);
+				rlVertex2f(ray * resolution + 530, y);
+				rlVertex2f(ray * resolution + 535, y);
+				rlEnd();
+			}
+		}
 
 		rayAngle -= ray_angle_increment;
 		rayAngle = FixAng(rayAngle);
