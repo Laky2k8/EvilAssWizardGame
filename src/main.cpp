@@ -5,10 +5,11 @@
 #include "rlgl.h"
 
 #include "Player.h"
-#include "textures.h"
+#include "Sprite.h"
+
 
 #define TITLE "Evil Ass Wizard Game"
-#define VERSION_NUM "0.0.1"
+#define VERSION_NUM "0.5"
 #define LAKYSTRATEGY_ERROR "EAWG::Error: "
 
 #define DR 0.0174532925
@@ -17,7 +18,7 @@ using namespace std;
 
 float mouseSensitivity = 0.005f;
 
-int resolution = 3;
+int resolution = 1;
 float render_resolution;
 
 float degToRad(float a) { return a * PI /180.0;}
@@ -39,18 +40,25 @@ void drawPlayer(Player plr, float size, Color color);
 void raycast(Player plr);
 
 // --- MAP ----
-int map_width = 8, map_height = 8;
+int map_width = 21, map_height = 15;
 int tile_size = 64;
 int map_walls[] =
 {
-	1,1,1,1,1,3,1,1,
-	1,0,0,2,0,0,0,1,
-	1,0,0,4,0,0,0,1,
-	1,4,2,2,0,0,5,0,
-	2,0,0,0,0,5,0,0,
-	2,0,0,0,5,5,5,0,
-	2,0,0,0,0,0,0,1,
-	1,1,3,1,3,1,3,1,	
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+        1,0,4,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,1,
+        1,1,1,1,1,0,1,0,1,1,1,1,1,0,0,0,1,1,1,0,1,
+        1,0,0,0,0,0,0,0,1,0,1,0,0,0,1,0,1,0,0,0,1,
+        1,0,1,1,1,1,0,1,1,0,1,0,1,1,1,0,1,1,1,1,1,
+        1,0,1,0,0,1,0,0,0,0,1,0,1,4,0,0,0,0,0,0,1,
+        1,0,1,5,1,6,1,5,1,0,1,0,1,0,1,1,1,1,1,0,1,
+        1,0,1,0,0,0,0,0,1,3,1,0,1,0,1,0,0,0,0,0,1,
+        1,0,1,0,0,0,0,0,1,2,1,0,1,1,1,5,1,1,1,0,1,
+        1,0,5,0,0,0,0,0,5,0,1,0,0,0,1,0,1,0,1,0,1,
+        1,0,1,1,1,7,1,5,1,0,1,1,1,0,1,0,1,0,1,0,1,
+        1,0,0,0,1,1,1,0,1,4,0,0,0,0,1,0,1,0,1,0,1,
+        1,1,1,0,1,0,1,3,1,1,1,1,1,2,1,4,1,0,1,0,1,
+        1,2,0,0,0,0,0,0,5,0,0,0,0,0,0,0,1,0,0,0,1,
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
 };
 
 int map_floor[]=          //floors
@@ -79,10 +87,20 @@ int map_ceiling[]=          //ceiling
 
 void drawMap2D();
 
+Texture2D wallTextures[7];
+
+
+Vector2 tile_to_pos(int tileX, int tileY)
+{
+	return { tileX * tile_size + tile_size / 2,
+			 tileY * tile_size + tile_size / 2 };
+}
+
+
 int main() 
 {
-	const int screenWidth = 1024;
-	const int screenHeight = 512;
+	const int screenWidth = 1280;
+	const int screenHeight = 720;
 	InitWindow(screenWidth, screenHeight, TITLE);
 	SetTargetFPS(180);
 	//DisableCursor();
@@ -91,10 +109,26 @@ int main()
 	Image wizard_interact = LoadImage("assets/wizard_interact.png");
 	bool isInteracting = false;
 
+	// Load textures (hardcoded cuz we don't have THAT many)
+	wallTextures[0] = LoadTexture("assets/tiles/rock.png");
+	wallTextures[1] = LoadTexture("assets/tiles/bars.png");
+	wallTextures[2] = LoadTexture("assets/tiles/bars_hand.png");
+	wallTextures[3] = LoadTexture("assets/tiles/bars_eyes.png");
+	wallTextures[4] = LoadTexture("assets/tiles/door.png");
+	wallTextures[5] = LoadTexture("assets/tiles/painting.png");
+	wallTextures[6] = LoadTexture("assets/tiles/painting_laky.png");
+
+
+
 	Player plr({300, 300}, 200, 60);
 	plr.angle = -90;
 		plr.deltaPos.x = cos(degToRad(plr.angle));
 		plr.deltaPos.y = -sin(degToRad(plr.angle));
+
+	int startTileX = 19;
+	int startTileY = 13;
+	plr.position = { startTileX * tile_size + tile_size / 2,
+					startTileY * tile_size + tile_size / 2 };
 
 	render_resolution = screenWidth / resolution;
 
@@ -196,7 +230,7 @@ int main()
 			int interactY = plr.position.y / tile_size;
 			int interactY_add = (plr.position.y + yOffset) / tile_size;
 
-			if(map_walls[interactY_add * map_width + interactX_add] == 4)
+			if(map_walls[interactY_add * map_width + interactX_add] == 5)
 			{
 				// If there's a door and we interact with it, open it
 				map_walls[interactY_add * map_width + interactX_add] = 0;
@@ -211,15 +245,17 @@ int main()
 		ClearBackground({76, 76, 76, 255});
 		DrawText((string(TITLE) + " " + string(VERSION_NUM)).c_str(), 720, 20, 20, WHITE);
 
-		drawMap2D();
+		#ifdef DEBUG
+			drawMap2D();
+		#endif
 		raycast(plr);
-		drawPlayer(plr, 8, YELLOW);
-
-		// Draw 128x128 wizard image scaled up to 512x512 at bottom right
+		#ifdef DEBUG
+			drawPlayer(plr, 8, YELLOW);
+		#endif
 
 		if(isInteracting)
 		{
-			DrawTexturePro(LoadTextureFromImage(wizard_interact), {0,0,128,128}, {screenWidth - 400, screenHeight - 400, 400, 400}, {0,0}, 0, WHITE);
+			DrawTexturePro(LoadTextureFromImage(wizard_interact), {0,0,128,128}, {screenWidth - 500, screenHeight - 500, 500, 500}, {0,0}, 0, WHITE);
 
 			// Wait a second and then stop interacting
 			static float interactTimer = 0;
@@ -232,7 +268,7 @@ int main()
 		}
 		else
 		{
-			DrawTexturePro(LoadTextureFromImage(wizard), {0,0,128,128}, {screenWidth - 400, screenHeight - 400, 400, 400}, {0,0}, 0, WHITE);
+			DrawTexturePro(LoadTextureFromImage(wizard), {0,0,128,128}, {screenWidth - 500, screenHeight - 500, 500, 500}, {0,0}, 0, WHITE);
 		}
 
 		
@@ -240,6 +276,12 @@ int main()
 		EndDrawing();
 	}
 	CloseWindow();
+
+	for(int i = 0; i < 5; i++)
+	{
+		UnloadTexture(wallTextures[i]);
+	}
+
 	return 0;
 }
 
@@ -301,6 +343,8 @@ void raycast(Player plr)
 	float ray_angle_increment = plr.fov / render_resolution;
 
 	int shade;
+
+	float hitXpos = 0; // Texture coordinate
 
 	rayAngle = plr.angle + (plr.fov/2.0f);
 	rayAngle = FixAng(rayAngle);
@@ -465,6 +509,8 @@ void raycast(Player plr)
 
 			shade = 230;
 			hitVertical = true;
+
+			hitXpos = fmod(rayY, tile_size); // Get texture coords
 		}
 		else
 		{
@@ -476,223 +522,62 @@ void raycast(Player plr)
 
 			shade = 178;
 			hitVertical = false;
+
+			hitXpos = fmod(rayX, tile_size); // Get texture coords
 		}
 
 		// Draw the  hit with green :]
-		DrawLineEx(plr.position, {rayX, rayY}, 2, GREEN);
+		#ifdef DEBUG
+			DrawLineEx(plr.position, {rayX, rayY}, 2, GREEN);
+		#endif
 
 
 		// Fix Fisheye
 		float ca_deg = plr.angle - rayAngle;            // difference in degrees
-
 		if(ca_deg < -180.0f) ca_deg += 360.0f;
 		if(ca_deg >  180.0f) ca_deg -= 360.0f;
 
 		float ca = degToRad(ca_deg);
 		distance = distance * cos(ca);
 
+
+
+
 		float projectionPlaneDistance = (GetScreenWidth() / 2) / tan(degToRad(plr.fov / 2));
 		float line_height = (tile_size * projectionPlaneDistance) / distance;
-
-		// Textured walls
-		float texY = 0; // which pixel we're currently at in the line
-		float texX = 0;
-		float texY_step = 32.0 / (float)line_height; // The amount we step to get to the next pixel
-		float texY_offset = 0;
-
-		if(line_height > GetScreenHeight())
-		{
-			texY_offset = (line_height - GetScreenHeight()) / 2.0;
-			line_height = GetScreenHeight();
-		}
 		
 		// Center our beautiful lines on screen
 		float line_offset = (GetScreenHeight() / 2) - line_height / 2;
 
-		//DrawLineEx({ray*resolution+530, line_offset}, {ray*resolution+530, line_offset + line_height}, resolution, {0, shade, 0, 255});
-
-		// --- Draw 3D Walls ---
+		float texX = (hitXpos / tile_size) * 48; // Get texture coloumn to draw (the texture is 48x48)
+		
+		// Handle texture clipping when line extends beyond screen
+		float texY = 0;
+		float texHeight = 48;
+		float drawHeight = line_height;
+		float drawOffset = line_offset;
+		
+		if(line_height > GetScreenHeight())
 		{
-			texY = texY_offset * texY_step + horiz_map_texture * 32; // Always get the texture the map calls for :]
-
-			if(hitVertical)
-			{
-				float texCoord = fmod(rayY, 64.0f);
-				if(texCoord < 0) texCoord += 64.0f;
-				texX = (int)(texCoord / 2.0f);
-				
-				// Flip if looking left (angle between 90 and 270)
-				if(rayAngle > 90 && rayAngle < 270)
-				{
-					texX = 31 - texX;
-				}
-			}
-			else
-			{
-				float texCoord = fmod(rayX, 64.0f);
-				if(texCoord < 0) texCoord += 64.0f;
-				texX = (int)(texCoord / 2.0f);
-				
-				// Flip if looking up (angle between 0 and 180)
-				if(rayAngle < 180)
-				{
-					texX = 31 - texX;
-				}
-			}
-
-			for(int y = 0; y < line_height; y++)
-			{
-
-				float brightness = All_Textures[(int)(texY) * 32 + (int)(texX)];
-
-				rlBegin(RL_LINES);
-				rlColor4ub(brightness * shade, brightness * shade, brightness * shade, 255);
-				rlVertex2f(ray * resolution+530, y+line_offset);
-				rlVertex2f(ray * resolution+535, y+line_offset);
-				rlEnd();
-
-				texY += texY_step; // Step to the next pixel in the line
-			}
+			// Calculate which part of the texture to show
+			float ratio = GetScreenHeight() / line_height;
+			texHeight = 48 * ratio;
+			texY = (48 - texHeight) / 2; // Center the visible portion
+			drawHeight = GetScreenHeight();
+			drawOffset = 0;
 		}
 
-		// --- Draw Floors ---
-		{
-			const int screenH = GetScreenHeight();
-			const int screenW = GetScreenWidth();
-			
-			// Wall bounds
-			int wallTop = (int)line_offset;
-			int wallBottom = (int)(line_offset + line_height);
-			
-			// Only render floor below the wall
-			for (int y = wallBottom; y < screenH; y++)
-			{
-				float screenMiddle = screenH / 2.0f;
-				float projectionDistance = (screenW / 2.0f) / tanf(degToRad(plr.fov / 2.0f));
-				
-				// Distance to floor point at this screen row
-				float floorDist = (tile_size / 2.0f * projectionDistance) / (y - screenMiddle);
-				
-				float rayDirX = cosf(degToRad(rayAngle));
-				float rayDirY = -sinf(degToRad(rayAngle));
-				
-				// World position of floor point
-				float floorX = plr.position.x + rayDirX * floorDist;
-				float floorY = plr.position.y + rayDirY * floorDist;
-				
-				// Which map cell is this?
-				int mapX = (int)(floorX / tile_size);
-				int mapY = (int)(floorY / tile_size);
-				
-				if (mapX < 0 || mapX >= map_width || mapY < 0 || mapY >= map_height)
-					continue;
-					
-				// Check if there's a wall here
-				if (map_walls[mapY * map_width + mapX] > 0)
-					continue;
-					
-				int floorTex = map_floor[mapY * map_width + mapX];
-				if (floorTex <= 0)
-					continue;
-					
-				// Texture coordinates within the tile
-				float texCoordX = fmodf(floorX, tile_size);
-				float texCoordY = fmodf(floorY, tile_size);
-				if (texCoordX < 0) texCoordX += tile_size;
-				if (texCoordY < 0) texCoordY += tile_size;
-				
-				// Convert to texture coordinates
-				int texX = (int)(texCoordX / 2.0f);
-				int texY = (int)(texCoordY / 2.0f);
-				if (texX < 0) texX = 0; if (texX > 31) texX = 31;
-				if (texY < 0) texY = 0; if (texY > 31) texY = 31;
-				
-				// Sample texture
-				int textureIndex = (floorTex - 1) * 32;
-				float brightness = All_Textures[(int)(texY) * 32 + (int)(texX) + textureIndex];
-				
-				float shade = 1.0f / (1.0f + floorDist * 0.001f);
-				if (shade < 0.3f) shade = 0.3f;
-				
-				unsigned char color = (unsigned char)(brightness * shade * 255.0f);
-				
-				rlBegin(RL_LINES);
-				rlColor4ub(color, color, color, 255);
-				rlVertex2f(ray * resolution + 530, y);
-				rlVertex2f(ray * resolution + 535, y);
-				rlEnd();
-			}
-		}
+		int texIndex = horiz_map_texture;
+		if(texIndex < 0) texIndex = 0;
+		if(texIndex > wallTextures->width - 1) texIndex = wallTextures->width - 1;
 
-		// --- Draw Ceiling ---
-		{
-			const int screenH = GetScreenHeight();
-			const int screenW = GetScreenWidth();
-			
-			// Wall bounds
-			int wallTop = (int)line_offset;
-			int wallBottom = (int)(line_offset + line_height);
-			
-			// Only render ceiling above the wall
-			for (int y = 0; y < wallTop; y++)
-			{
-				float screenMiddle = screenH / 2.0f;
-				float projectionDistance = (screenW / 2.0f) / tanf(degToRad(plr.fov / 2.0f));
-				
-				// Distance to floor point at this screen row
-				float ceilingDist = (tile_size / 2.0f * projectionDistance) / (screenMiddle - y);
-				
-				float rayDirX = cosf(degToRad(rayAngle));
-				float rayDirY = -sinf(degToRad(rayAngle));
-				
-				// World position of floor point
-				float floorX = plr.position.x + rayDirX * ceilingDist;
-				float floorY = plr.position.y + rayDirY * ceilingDist;
-				
-				// Which map cell is this?
-				int mapX = (int)(floorX / tile_size);
-				int mapY = (int)(floorY / tile_size);
-				
-				if (mapX < 0 || mapX >= map_width || mapY < 0 || mapY >= map_height)
-					continue;
-					
-				// Check if there's a wall here
-				if (map_walls[mapY * map_width + mapX] > 0)
-					continue;
-					
-				int ceilTex = map_ceiling[mapY * map_width + mapX];
-				if (ceilTex <= 0)
-					continue;
-					
-				// Texture coordinates within the tile
-				float texCoordX = fmodf(floorX, tile_size);
-				float texCoordY = fmodf(floorY, tile_size);
-				if (texCoordX < 0) texCoordX += tile_size;
-				if (texCoordY < 0) texCoordY += tile_size;
-				
-				// Convert to texture coordinatess
-				int texX = (int)(texCoordX / 2.0f);
-				int texY = (int)(texCoordY / 2.0f);
-				if (texX < 0) texX = 0; if (texX > 31) texX = 31;
-				if (texY < 0) texY = 0; if (texY > 31) texY = 31;
-				
-				// Sample texture
-				int textureIndex = (ceilTex - 1) * 32;
-				float brightness = All_Textures[(int)(texY) * 32 + (int)(texX) + textureIndex];
-				
-				float shade = 1.0f / (1.0f + ceilingDist * 0.001f);
-				if (shade < 0.3f) shade = 0.3f;
-				
-				unsigned char color = (unsigned char)(brightness * shade * 255.0f);
-				
-				rlBegin(RL_LINES);
-				rlColor4ub(color, color, color, 255);
-				rlVertex2f(ray * resolution + 530, y);
-				rlVertex2f(ray * resolution + 535, y);
-				rlEnd();
-			}
-		}
-
+		// Draw wall slice
+		Rectangle source = {texX, texY, 1, texHeight};
+		Rectangle dest = {ray * resolution, drawOffset, resolution, drawHeight};
+		Color tint = hitVertical ? Color{230, 230, 230, 255} : Color{178, 178, 178, 255};
+		DrawTexturePro(wallTextures[texIndex], source, dest, {0, 0}, 0, tint);
+		
+		
 		rayAngle -= ray_angle_increment;
 		rayAngle = FixAng(rayAngle);
 	}
