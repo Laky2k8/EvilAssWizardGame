@@ -11,13 +11,9 @@ The game's progress right now:
 - Raycasting
 - Textured walls
 - Textured floors
-
-With these coming:
 - Sprites
-- Mana counter
-- Procedural generation
+- Sick as hell pixelart 😎
 
-Yeah I know I know, I don't have that much yet, but to my defense 10 hours is surprisingly short '^^
 I think this game has a lot of potential; I really like raycasters and 2.5D games, and I even made a raycaster engine back in 2024 (https://github.com/LBence-Szixi/lakys_awsome_raycaster/).
 That one used GLFW though, and this time I'm using Raylib, which is a pretty cool library I've started learning recently. It's really fun and surprisingly much faster than my old implementation;
 And as a sweet bonus it has a Nintendo Switch port so I can even port this game to be Switch Homebrew if I want :P
