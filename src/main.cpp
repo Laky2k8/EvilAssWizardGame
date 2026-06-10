@@ -9,7 +9,7 @@
 
 
 #define TITLE "Evil Ass Wizard Game"
-#define VERSION_NUM "0.5"
+#define VERSION_NUM "0.6"
 #define LAKYSTRATEGY_ERROR "EAWG::Error: "
 
 #define DR 0.0174532925
@@ -105,8 +105,8 @@ int main()
 	SetTargetFPS(180);
 	//DisableCursor();
 
-	Image wizard = LoadImage("assets/wizard.png");
-	Image wizard_interact = LoadImage("assets/wizard_interact.png");
+	Texture2D wizard = LoadTexture("assets/wizard.png");
+	Texture2D wizard_interact = LoadTexture("assets/wizard_interact.png");
 	bool isInteracting = false;
 
 	// Load textures (hardcoded cuz we don't have THAT many)
@@ -243,7 +243,8 @@ int main()
 
 		BeginDrawing();
 		ClearBackground({76, 76, 76, 255});
-		DrawText((string(TITLE) + " " + string(VERSION_NUM)).c_str(), 720, 20, 20, WHITE);
+
+		DrawRectangle(0, screenHeight / 2, screenWidth, screenHeight / 2, {50, 50, 50, 255});
 
 		#ifdef DEBUG
 			drawMap2D();
@@ -255,7 +256,7 @@ int main()
 
 		if(isInteracting)
 		{
-			DrawTexturePro(LoadTextureFromImage(wizard_interact), {0,0,128,128}, {screenWidth - 500, screenHeight - 500, 500, 500}, {0,0}, 0, WHITE);
+			DrawTexturePro(wizard_interact, {0,0,128,128}, {screenWidth - 500, screenHeight - 500, 500, 500}, {0,0}, 0, WHITE);
 
 			// Wait a second and then stop interacting
 			static float interactTimer = 0;
@@ -268,10 +269,10 @@ int main()
 		}
 		else
 		{
-			DrawTexturePro(LoadTextureFromImage(wizard), {0,0,128,128}, {screenWidth - 500, screenHeight - 500, 500, 500}, {0,0}, 0, WHITE);
+			DrawTexturePro(wizard, {0,0,128,128}, {screenWidth - 500, screenHeight - 500, 500, 500}, {0,0}, 0, WHITE);
 		}
 
-		
+		DrawText((string(TITLE) + " " + string(VERSION_NUM)).c_str(), 20, 20, 20, WHITE);
 
 		EndDrawing();
 	}
@@ -281,6 +282,8 @@ int main()
 	{
 		UnloadTexture(wallTextures[i]);
 	}
+	UnloadTexture(wizard);
+	UnloadTexture(wizard_interact);
 
 	return 0;
 }
@@ -397,10 +400,10 @@ void raycast(Player plr)
 		{
 			rayX = plr.position.x;
 			rayY = plr.position.y;
-			view_dist = 8;
+			view_dist = 20;
 		}
 
-		while(view_dist < 8)
+		while(view_dist < 20)
 		{
 			mX = (int)(rayX / 64);
 			mY = (int)(rayY / 64);
@@ -409,7 +412,7 @@ void raycast(Player plr)
 			if(mapPos >= 0 && mapPos < map_width * map_height && map_walls[mapPos] > 0)
 			{
 				// We hit a wall!!! Yippeee
-				view_dist = 8; // We ain't lookin around anymore
+				view_dist = 20; // We ain't lookin around anymore
 
 				vert_map_texture = map_walls[mapPos] - 1;
 
@@ -464,10 +467,10 @@ void raycast(Player plr)
 		{
 			rayX = plr.position.x;
 			rayY = plr.position.y;
-			view_dist = 8;
+			view_dist = 20;
 		}
 
-		while(view_dist < 8)
+		while(view_dist < 20)
 		{
 			mX = (int)(rayX / 64);
 			mY = (int)(rayY / 64);
@@ -476,7 +479,7 @@ void raycast(Player plr)
 			if(mapPos >= 0 && mapPos < map_width * map_height && map_walls[mapPos] > 0)
 			{
 				// We hit a wall!!! Yippeee
-				view_dist = 8; // We ain't lookin around anymore
+				view_dist = 20; // We ain't lookin around anymore
 
 				horiz_map_texture = map_walls[mapPos] - 1;
 
@@ -511,6 +514,12 @@ void raycast(Player plr)
 			hitVertical = true;
 
 			hitXpos = fmod(rayY, tile_size); // Get texture coords
+
+			// flip east-facing walls
+			if(cos(degToRad(rayAngle)) < -0.001)
+			{
+				hitXpos = tile_size - hitXpos;
+			}
 		}
 		else
 		{
@@ -520,10 +529,16 @@ void raycast(Player plr)
 
 			vert_map_texture = horiz_map_texture;
 
-			shade = 178;
+			shade = 140;
 			hitVertical = false;
 
 			hitXpos = fmod(rayX, tile_size); // Get texture coords
+
+			// flip north-facing walls
+			if(sin(degToRad(rayAngle)) < -0.001)
+			{
+				hitXpos = tile_size - hitXpos;
+			}
 		}
 
 		// Draw the  hit with green :]
@@ -574,7 +589,7 @@ void raycast(Player plr)
 		// Draw wall slice
 		Rectangle source = {texX, texY, 1, texHeight};
 		Rectangle dest = {ray * resolution, drawOffset, resolution, drawHeight};
-		Color tint = hitVertical ? Color{230, 230, 230, 255} : Color{178, 178, 178, 255};
+		Color tint = Color{shade, shade, shade, 255};
 		DrawTexturePro(wallTextures[texIndex], source, dest, {0, 0}, 0, tint);
 		
 		
